@@ -7,7 +7,9 @@ package com.kon;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
-import java.util.concurrent.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.ExecutionException;
 import java.util.function.Supplier;
 
 public class C_RunAsyncTasks {
@@ -19,7 +21,7 @@ public class C_RunAsyncTasks {
         run();
     }
 
-     static void run() throws ExecutionException, InterruptedException {
+    static void run() throws ExecutionException, InterruptedException {
         Random random = new Random();
         Supplier<Quotation> fetchQuotationA = () -> {
             try {
@@ -58,12 +60,22 @@ public class C_RunAsyncTasks {
             CompletableFuture<Quotation> future = CompletableFuture.supplyAsync(task);
             futures.add(future);
         }
-        List<Quotation> quotations = new ArrayList<>();
-
+        Collection<Quotation> quotations = new ConcurrentLinkedDeque<>();
+        List<CompletableFuture<Void>> voids = new ArrayList<>();
         for (CompletableFuture<Quotation> future : futures) {
-            Quotation quotation = future.join();
-            quotations.add(quotation);
+            future.thenAccept(System.out::println);
+            CompletableFuture<Void> accept =
+                    future.thenAccept(quotations::add);
+            voids.add(accept);
         }
+
+        // This code is here to make sure the main thread does not die before we complete our other threads.
+        // If our code reaches the end and the main thread is done,
+        // the program will finish and the other threads will not have a chance to finish
+        for (CompletableFuture<Void> v : voids) {
+            v.join();
+        }
+
         Quotation bestQuotation = quotations.stream().min(Comparator.comparing(Quotation::amount)).orElseThrow();
 
         Instant end = Instant.now();
@@ -71,5 +83,5 @@ public class C_RunAsyncTasks {
         System.out.println("Best quotation [ASYNC] = " + bestQuotation + " (" + duration.toMillis() + "ms)");
 
     }
-    
+
 }
